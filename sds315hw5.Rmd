@@ -1,0 +1,100 @@
+---
+title: "Homework 5"
+author: "Mason Reed"
+date: "2024-02-28"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE)
+```
+
+```{r}
+library(kableExtra)
+library(mosaic)
+library(ggplot2)
+library(tidyverse)
+library(stringr)
+```
+
+### 1. Iron Bank
+```{r}
+sim_trades = do(100000)*nflip(2021, prob = .024)
+ggplot(sim_trades) + geom_histogram(aes(x=nflip), binwidth = 1, color = 'black', fill = 'violet') + labs(title = 'Simulated Flagged Trades Out Of 2021 Legal Trades', x = 'Flagged Trades', y = 'Occurances')
+simp = sum(sim_trades >= 70)/100000
+```
+
+Are Iron Bank's trades being flagged at the typical 2.45% rate?
+
+To answer this question, we can simulate the number of trades that would get flagged for 2021 trades, assuming the null hypothesis that the 2.4% baseline rate of trades getting flagged is true for Iron Bank. The test statistic to used to measure evidence against the null hypothesis is the number of flagged trades, where excessive flagged trades is evidence against the null hypothesis. The p-value for our Iron Bank's trades is `r round(simp,5)`, which is the probability that at least 70 trades would be flagged assuming the trades are getting flagged at the baseline rate of 2.4%. This p-value is very low, less than a percent, so the trades are pretty suspicious but still in the realm of possibly being legal.
+
+### 2. Health Inspections At Gourmet Bites
+```{r}
+sim_inspections = do(100000)*nflip(50, prob = .03)
+ggplot(sim_inspections) + geom_histogram(aes(x=nflip), binwidth = 1, color = 'black',fill = 'orange') + labs(title = "Simulated Failed Health Inspections", x = 'Number Of Failed Inspections Out Of 50', y = 'Number Of Simulations')
+inspections_pvalue = sum(sim_inspections >= 3) / nrow(sim_inspections)
+
+```
+
+Is Gourmet Bites failing their health inspections significantly higher than the city's 3% health inspection failure rate?
+
+The null hypothesis being tested is that Gourmet Bites is failing their health inspections at the typical citywide average of 3%. Simulating many scenarios of 50 health inspections with a 3% average failure rate will help to determine if Gourmet Bites is failing their inspections excessively. The test statistic used to measure evidence against the null hypothesis is the number of failed inspections since more failed inspections is evidence against the null hypothesis. The p-value for Gourmet Bites' failed inspections is `round (inspections_pvalue,4)`, which represents the probability that Gourmet Bites would fail at least 3 inspections out of 50, assuming that they are failing at the citywide average rate of 3%. The p-value of `round (inspections_pvalue,4)` is definitely possible, so it's probably unlikely that Gourmet Bites is failing their inspections at a significantly higher rate than accepted.
+
+
+### 3. LLM Watermarking
+```{r}
+letter_freq = read.csv('letter_frequencies.csv')
+brown_text = readLines('brown_sentences.txt')
+
+calculate_chi_squared = function(sentence, freq_table) {
+  
+  # Ensure letter frequencies are normalized and sum to 1
+  freq_table$Probability = freq_table$Probability / sum(freq_table$Probability)
+  
+  # Remove non-letters and convert to uppercase
+  clean_sentence = gsub("[^A-Za-z]", "", sentence)
+  clean_sentence = toupper(clean_sentence)
+  
+  # Count the occurrences of each letter in the sentence
+  observed_counts = table(factor(strsplit(clean_sentence, "")[[1]], levels = freq_table$Letter))
+  
+  # Calculate expected counts
+  total_letters = sum(observed_counts)
+  expected_counts = total_letters * freq_table$Probability
+  
+  # Chi-squared statistic
+  chi_squared_stat = sum((observed_counts - expected_counts)^2 / expected_counts)
+  
+  return(chi_squared_stat)
+}
+
+#vchi_dist is the reference distribution for Part B
+chi_dist = sapply(brown_text,calculate_chi_squared,freq_table = letter_freq)
+chiDist = tibble('chi_squared' = chi_dist)
+ggplot(chiDist) + geom_histogram(aes(x = chi_squared), color = 'black', fill = 'turquoise') + labs(title = 'Typical Chi-Squared Distribution Based On Brown Corpus', x = 'Chi-Squared Value', y='Frequency')
+
+sentences <- c(
+  "She opened the book and started to read the first chapter, eagerly anticipating what might come next.",
+  "Despite the heavy rain, they decided to go for a long walk in the park, crossing the main avenue by the fountain in the center.",
+  "The museum’s new exhibit features ancient artifacts from various civilizations around the world.",
+  "He carefully examined the document, looking for any clues that might help solve the mystery.",
+  "The students gathered in the auditorium to listen to the guest speaker’s inspiring lecture.",
+  "Feeling vexed after an arduous and zany day at work, she hoped for a peaceful and quiet evening at home, cozying up after a quick dinner with some TV, or maybe a book on her upcoming visit to Auckland.",
+  "The chef demonstrated how to prepare a delicious meal using only locally sourced ingredients, focusing mainly on some excellent dinner recipes from Spain.",
+  "They watched the sunset from the hilltop, marveling at the beautiful array of colors in the sky.",
+  "The committee reviewed the proposal and provided many points of useful feedback to improve the project’s effectiveness.",
+  "Despite the challenges faced during the project, the team worked tirelessly to ensure its successful completion, resulting in a product that exceeded everyone’s expectations."
+)
+p_value_calc = function(sent, reference_distribution, freq){
+  observed_chi = calculate_chi_squared(sent, freq)
+  return((sum(reference_distribution >= observed_chi)/length(reference_distribution)))
+}
+watermarked_pvalues = sapply(sentences, p_value_calc, reference_distribution = chi_dist, freq = letter_freq)
+watermarked_pvalues = tibble('sentence' = c(1:10), 'p-values' = watermarked_pvalues)
+kable(watermarked_pvalues)
+```
+
+
+The sentence likely to be the one produced by a LLM with watermarking is sentence 6, "Feeling vexed after an arduous and zany day at work, she hoped for a peaceful and quiet evening at home, cozying up after a quick dinner with some TV, or maybe a book on her upcoming visit to Auckland.", since it has the lowest p-value, meaning its chi-squared value is least likely to occur 'naturally' based on the reference distribution.
+
+Github: https://github.com/masoncancode/sds315hw5
